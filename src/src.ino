@@ -43,14 +43,14 @@ typedef struct KeyValuePair
 #define TAG_COUNT 9
 KeyValuePair addresses[TAG_COUNT] = {
     {"ff:ff:ff:ff:ff:ff", TAG_SINGLE_FLOAT, "????", "", "Vesi", 0, TFT_BLUE},
-    {"48:70:1e:92:20:f2", TAG_MOPEKA, "????", "", "Gaas 1", 0, TFT_YELLOW},
-    {"cc:33:31:c8:73:34", TAG_MOPEKA, "????", "", "Gaas 2", 0, TFT_YELLOW},
+    {"48:70:1e:92:20:f2", TAG_MOPEKA, "????", "", "Gaas 1", 0, 0x06af},
+    {"cc:33:31:c8:73:34", TAG_MOPEKA, "????", "", "Gaas 2", 0, 0x06af},
     {"ff:ff:ff:ff:ff:ff", TAG_DUAL_FLOAT, "????", "", "Must", 0, TFT_BLACK},
     {"ff:ff:ff:ff:ff:ff", TAG_DUAL_FLOAT, "????", "", "Hall", 0, TFT_BLACK},
-    {"d4:aa:40:07:a8:0a", TAG_RUUVI, "????", "", "Kulmik", 0, TFT_GREEN},
-    {"f9:e0:62:88:10:bb", TAG_RUUVI, "????", "", "Sugavkulm", 0, TFT_GREEN},
-    {"d4:e1:02:40:59:96", TAG_RUUVI, "????", "", "Valistemp", 0, TFT_GREEN},
-    {"dc:91:4d:4f:9d:08", TAG_RUUVI, "????", "", "Sisetemp", 0, TFT_GREEN},
+    {"d4:aa:40:07:a8:0a", TAG_RUUVI, "????", "", "Kulmik", 0, 0x00ff42},
+    {"f9:e0:62:88:10:bb", TAG_RUUVI, "????", "", "Sugavkulm", 0, 0x00ff42},
+    {"d4:e1:02:40:59:96", TAG_RUUVI, "????", "", "Valistemp", 0, 0x00ff42},
+    {"dc:91:4d:4f:9d:08", TAG_RUUVI, "????", "", "Sisetemp", 0, 0x00ff42},
 };
 
 KeyValuePair *getTag(const char *address)
@@ -85,9 +85,9 @@ void loop()
   for (int i = 0; i < TAG_COUNT; i++)
   {
     KeyValuePair *tag = &addresses[i];
-    if (millis() - tag->lastUpdate > 10000)
+    if (millis() - tag->lastUpdate > 30000)
     {
-      // If no update in last 10 sec, change text
+      // If no update in last 30 sec, change text
       sprintf(tag->previousValue, "%s", tag->value);
       strncpy(tag->value, "----  ", sizeof(tag->value));
     }
@@ -103,6 +103,60 @@ void loop()
     drawy = drawy + 48 + 2;
   }
 }
+
+template <size_t MaxSize>
+class List {
+private:
+    double data[MaxSize];
+    size_t size;
+
+public:
+    List() : size(0) {}
+
+    void append(double value) {
+      if(size >= MaxSize){
+        Serial.println("Overappend");
+        return;
+      }
+      data[size++] = value;
+    }
+
+    void set(size_t index, double value) {
+      if(index > MaxSize){
+        Serial.printf("set index %i over max size %i\n", index, MaxSize);
+        return;
+      }
+      data[index] = value;
+    }
+
+    void incr(size_t index, double value) {
+      if(index > MaxSize){
+        Serial.printf("incr index %i over max size %i\n", index, MaxSize);
+        return;
+      }
+      data[index] += value;
+    }
+
+    double operator[](size_t index) const {
+      if(index > MaxSize){
+        Serial.printf("get index %i over max size %i\n", index, MaxSize);
+        return 0;
+      }
+        return data[index];
+    }
+
+    void dump(const char suffix) {
+      Serial.printf("len(%c) = %i\n", suffix, size);
+      for(int i = 0; i < size; i++){
+        Serial.printf("%d = %.0f %c\n", i, data[i], suffix);
+      }
+    }
+
+    size_t getSize() const {
+        return size;
+    }
+};
+
 
 class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
 {
@@ -144,136 +198,7 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
 
     updateValue(tag, temperature, "%.1f `C");
   }
-
-  struct mopeka_std_values
-  {
-    u_int16_t time_0 : 5;
-    u_int16_t value_0 : 5;
-    u_int16_t time_1 : 5;
-    u_int16_t value_1 : 5;
-    u_int16_t time_2 : 5;
-    u_int16_t value_2 : 5;
-    u_int16_t time_3 : 5;
-    u_int16_t value_3 : 5;
-  } __attribute__((packed));
-
-  struct mopeka_std_package
-  {
-    u_int8_t data_0 : 8;
-    u_int8_t data_1 : 8;
-    u_int8_t raw_voltage : 8;
-
-    u_int8_t raw_temp : 6;
-    bool slow_update_rate : 1;
-    bool sync_pressed : 1;
-
-    mopeka_std_values val[4];
-  } __attribute__((packed));
-
-  void handleMopeka(BLEAdvertisedDevice device, KeyValuePair *tag)
-  {
-    uint8_t* data = (uint8_t*)device.getManufacturerData().data();
-    char* manufacturerdata = BLEUtils::buildHexData(NULL, (uint8_t*)device.getManufacturerData().data(), device.getManufacturerData().length());
-    Serial.println(manufacturerdata);
-    const auto *mopeka_data = (const mopeka_std_package *) &data;
-    uint8_t temp_in_c = parse_temperature(mopeka_data);
-    float lpg_speed_of_sound = get_lpg_speed_of_sound(temp_in_c);
-
-    std::array<u_int8_t, 12> measurements_time = {};
-    std::array<u_int8_t, 12> measurements_value = {};
-    {
-      u_int8_t measurements_index = 0;
-      for (u_int8_t i = 0; i < 3; i++)
-      {
-        measurements_time[measurements_index] = mopeka_data->val[i].time_0 + 1;
-        measurements_value[measurements_index] = mopeka_data->val[i].value_0;
-        measurements_index++;
-        measurements_time[measurements_index] = mopeka_data->val[i].time_1 + 1;
-        measurements_value[measurements_index] = mopeka_data->val[i].value_1;
-        measurements_index++;
-        measurements_time[measurements_index] = mopeka_data->val[i].time_2 + 1;
-        measurements_value[measurements_index] = mopeka_data->val[i].value_2;
-        measurements_index++;
-        measurements_time[measurements_index] = mopeka_data->val[i].time_3 + 1;
-        measurements_value[measurements_index] = mopeka_data->val[i].value_3;
-        measurements_index++;
-      }
-    }
-
-    u_int16_t best_value = 0;
-    u_int16_t best_time = 0;
-    {
-      u_int16_t measurement_time = 0;
-      for (u_int8_t i = 0; i < 12; i++)
-      {
-        // Time is summed up until a value is reported. This allows time values larger than the 5 bits in transport.
-        measurement_time += measurements_time[i];
-        if (measurements_value[i] != 0)
-        {
-          // I got a value
-          if (measurements_value[i] > best_value)
-          {
-            // This value is better than a previous one.
-            best_value = measurements_value[i];
-            best_time = measurement_time;
-          }
-          // Reset measurement_time or next values.
-          measurement_time = 0;
-        }
-      }
-    }
-
-    uint32_t distance_value = lpg_speed_of_sound * best_time / 100.0f;
-    uint8_t tank_level = 0;
-    if (distance_value >= 366)
-    {
-      tank_level = 100; // cap at 100%
-    }
-    else if (distance_value > 38)
-    {
-      tank_level = ((100.0f / (366 - 38)) * (distance_value - 38));
-    }
-    Serial.printf("%i level, %i dist, %i temp, %i time\n", tank_level, distance_value, temp_in_c, best_time);
-    updateValue(tag, tank_level, "%.1f %%");
-  }
-
-  uint8_t parse_temperature(const mopeka_std_package *message)
-  {
-    uint8_t tmp = message->raw_temp;
-    if (tmp == 0x0)
-    {
-      return -40;
-    }
-    else
-    {
-      return (uint8_t)((tmp - 25.0f) * 1.776964f);
-    }
-  }
-
-  float get_lpg_speed_of_sound(float temperature)
-  {
-    float propane_butane_mix = 1;
-    return 1040.71f - 4.87f * temperature - 137.5f * propane_butane_mix - 0.0107f * temperature * temperature -
-           1.63f * temperature * propane_butane_mix;
-  }
-
-  void handleMopekaOld(BLEAdvertisedDevice device, KeyValuePair *tag)
-  {
-    uint8_t *data = device.getPayload();
-    int dataLen = device.getPayloadLength();
-
-    // This is wrong since it should account for temperature
-    // and speed of sound inside fluid
-    uint8_t level = 0x35;
-    for (uint8_t i = 8; i < 27; i++)
-    {
-      level ^= data[i];
-    }
-    level = level * .762; // cm
-
-    updateValue(tag, level, "%.1f %%");
-  }
-
+  
   void handleDualFloat(BLEAdvertisedDevice device, KeyValuePair *tag)
   {
     uint8_t *data = device.getPayload();
@@ -298,6 +223,262 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
     strncpy(tag->value, newValue, sizeof(tag->value));
     tag->lastUpdate = millis();
   }
+
+  // ----------------- MOPEKA ----------------
+ 
+  double a(double a, double b){
+      double c = .5 * 1.2421875;
+      double e = (255 - b) / 256;
+      if(c >= a){
+          return 0;
+      }
+      return (a-c)*e;
+  }
+
+  template <size_t Size,size_t Size2>
+  void loop1(List<Size>& k,List<Size2>& advIndex){
+      int b = 1;
+      while(b<advIndex.getSize()){
+        int g = advIndex[b-1] / 2;
+        int h = advIndex[b] / 2;
+        if((h-1) != g){
+            k.append(b);
+        }
+        b+=1;
+      }
+  }
+
+  template <size_t Size, size_t Size2, size_t Size3, size_t Size4>
+  void loop2(List<Size>& adv, List<Size2>& k, List<Size3>& g, List<Size4>& l){
+      int h = k.getSize();
+      int p = 0;
+      int q = 0;
+      int f = 0;
+      for(int b = 0; b < h; b++){
+          int n = 0;
+          int m = 0;
+          if(b == h-1){
+              q = adv.getSize();
+          }else{
+              q = k[b+1];
+          }
+          f = p;
+          while(f < q){
+              if(adv[f > m]){
+                  n = f;
+                  m = adv[f];
+              }
+              f+=1;
+          }
+          g.append(n);
+          f = p;
+          while (f < q){
+              l.append(m);
+              f+=1;
+          }
+          p = q;
+      }
+  }
+
+  template <size_t Size, size_t Size2, size_t Size3>
+  void loop3( List<Size>& adv, List<Size2>& advIndex, List<Size3>& n){
+      int b = 0;
+      while (b < adv.getSize()){
+          int l = advIndex[b] / 2;
+          double p = a(adv[b], l);
+          n.incr(l, .5 * p);
+          int f = b + 1;
+          while (f < adv.getSize()){
+              int q = advIndex[f] / 2;
+              double r = a(adv[f], q);
+              if(p < r){
+                  r = p;
+              }
+              n.incr(q - l, r);
+              f += 1;
+          }
+          b += 1;
+      }
+  }
+
+  template <size_t Size, size_t Size2, size_t Size3, size_t Size4, size_t Size5>
+  void loop4( List<Size>& adv, List<Size2>& advIndex, List<Size3>& k, List<Size4>& g, List<Size5>& m){
+      int b = 0;
+      while (b < k.getSize()){
+          double l = advIndex[g[b]] / 2;
+          double p = advIndex[g[b]];
+          m.incr(l, a(p, l));
+          int f = b + 1;
+          while (f < k.getSize()){
+              int q = advIndex[g[f]] / 2;
+              m.incr(q - l, (a(adv[g[f]], q) + a(p, l)) / 2);
+              f += 1;
+          }
+          b += 1;
+      }
+  }
+
+  template <size_t Size>
+  void fillZeroes(List<Size>& list){
+      for(int b = 0; b < 100; b++){
+          list.append(0);
+      }
+  }
+
+  template <size_t Size>
+  double loop5(List<Size>& score_filt){
+      double n = 0;
+      double m = .005;
+      int b = 2;
+      while (b < 100){
+          if (score_filt[b] > m){
+              m = score_filt[b];
+              n = b;
+          }
+          b += 1;
+      }
+      return n;
+  }
+
+  template <size_t Size>
+  double max(List<Size>& list){
+      double max = 0;
+      for(int i = 0; i < list.getSize(); i++){
+          if(list[i] > max){
+              max = list[i];
+          }
+      }
+      return max;
+  }
+
+  template <size_t Size, size_t Size2, size_t Size3>
+  void scoreProcessing(List<Size>& scoreFilt, List<Size2>& n, List<Size3>& m){
+      scoreFilt.append(.25 * n[1] + .5 * n[0]);
+      scoreFilt.incr(0, .5 * m[1] + .5 * m[0]);
+      int b = 1;
+      while (b < 99){
+          scoreFilt.append(.25 * (n[b - 1] + n[b + 1]) + .5 * n[b]);
+          scoreFilt.incr(b, .5 * (m[b - 1] + m[b + 1]) + .5 * m[b]);
+          b += 1;
+      }
+      scoreFilt.append(.25 * n[98] + .5 * n[99]);
+      scoreFilt.incr(99, .5 * m[98] + .5 * m[99]);
+  }
+
+  template <size_t Size, size_t Size2>
+  float GetPulseEchoTime(List<Size>& adv, List<Size2>& advIndex){
+      List<12> k;
+      loop1(k, advIndex);
+
+      List<12> g;
+      List<100> l;
+      loop2(adv, k, g, l);
+
+      List<100> n;
+      List<100> m;
+      fillZeroes(n);
+      fillZeroes(m);
+
+      loop3(adv, advIndex, n);
+
+      loop4(adv, advIndex, k, g, m);
+      
+      List<100> score_filt;
+      scoreProcessing(score_filt, n, m);
+      
+      double loop5_result = loop5(score_filt);
+
+      if (.63453125 >= max(adv)){
+          return 0;
+      }
+      return 2E-5 * loop5_result;
+  }
+
+  double convertLevelToInches(double level, double temperature){
+    double r = temperature;
+    double a = r * r;
+    
+    if (r <= -39){
+      if (level <= 0){
+        return 0;
+      }
+      return 1E3 * level * 1E3 * 0.015 + 0.5;
+    }
+    double n = 1040.71 - 4.87 * r - 137.5 - .0107 * r * r - 1.63 * r;
+            
+    if(level <= 0){
+      return 0;
+    }
+
+    return level * n / 2 * 39.3701;
+  }
+
+  int getPercentFromHeight(double e){
+    double tank_max_height = 0.366;
+    double tank_min_offset = 0.0381;
+
+    double p = 100 * (e - tank_min_offset) / (tank_max_height - tank_min_offset);
+    if(p < 0){
+      return 0;
+    }
+    if(p > 100){
+      return 100;
+    }
+
+    return (int) p;
+  }
+
+  void handleMopeka(BLEAdvertisedDevice device, KeyValuePair *tag)
+  {
+    uint8_t* data = (uint8_t*)device.getManufacturerData().data();
+    // char* manufacturerdata = BLEUtils::buildHexData(NULL, (uint8_t*)device.getManufacturerData().data(), device.getManufacturerData().length());
+    // Serial.println(manufacturerdata);
+
+    int r = 63 & data[5];
+    float temperature;
+    if(r == 0){
+      temperature = -40;
+    }else{
+      temperature = 1.776964 * (r - 25);
+    }
+
+    int t = 0;
+    int n = 0;
+    r = 6;
+    List<12> adv;
+    List<12> advIndex;
+    for (byte a = 0; a < 12; a++)
+    {
+      int i = 10 * a;
+      int o = i / 8;
+      int c = i % 8;
+      int s = data[r + o] + 256 * data[r + o + 1];
+      s >>= c;
+      int l = 1 + (31 & s);
+      s >>= 5;
+      int u = 31 & s;
+      int A = n + l;
+      n = A;
+      if(A > 255){
+        break;
+      }
+      if(u != 0){
+        u -= 1;
+        u *= 4;
+        u += 6;
+        adv.append(u);
+        advIndex.append(2*A);
+        t += 1;
+      }
+    }
+    
+    float level = GetPulseEchoTime(adv, advIndex);
+    float inches = convertLevelToInches(level, temperature);
+    double meters = inches / 39.3701;
+    int percent = getPercentFromHeight(meters);
+    updateValue(tag, percent, "%.0f %%");
+  }
+
 };
 
 void setupBluetooth()
