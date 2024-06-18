@@ -10,12 +10,13 @@
 // #define TOUCH_CS 22
 #include <SPI.h>
 #include <TFT_eSPI.h>
-#include "roboto.h"
+#include "roboto_bold_38.h"
 
 TFT_eSPI tft = TFT_eSPI();
 
 #define TFTW 320 // tft width
 #define TFTH 480 // tft height
+#define BG TFT_BLACK
 
 #include <BLEDevice.h>
 #include <BLEUtils.h>
@@ -33,8 +34,8 @@ typedef struct KeyValuePair
 {
   const char *address;
   int tagType;
-  char value[8];
-  char previousValue[8];
+  char value[10];
+  char previousValue[10];
   const char *text;
   unsigned long lastUpdate;
   int color;
@@ -42,15 +43,15 @@ typedef struct KeyValuePair
 
 #define TAG_COUNT 9
 KeyValuePair addresses[TAG_COUNT] = {
-    {"ff:ff:ff:ff:ff:ff", TAG_SINGLE_FLOAT, "????", "", "Vesi", 0, TFT_BLUE},
+    {"c0:49:ef:d3:74:76", TAG_SINGLE_FLOAT, "????", "", "Vesi", 0, TFT_BLUE},
     {"48:70:1e:92:20:f2", TAG_MOPEKA, "????", "", "Gaas 1", 0, 0x06af},
     {"cc:33:31:c8:73:34", TAG_MOPEKA, "????", "", "Gaas 2", 0, 0x06af},
-    {"ff:ff:ff:ff:ff:ff", TAG_DUAL_FLOAT, "????", "", "Must", 0, TFT_BLACK},
-    {"ff:ff:ff:ff:ff:ff", TAG_DUAL_FLOAT, "????", "", "Hall", 0, TFT_BLACK},
-    {"d4:aa:40:07:a8:0a", TAG_RUUVI, "????", "", "Kulmik", 0, 0x00ff42},
-    {"f9:e0:62:88:10:bb", TAG_RUUVI, "????", "", "Sugavkulm", 0, 0x00ff42},
-    {"d4:e1:02:40:59:96", TAG_RUUVI, "????", "", "Valistemp", 0, 0x00ff42},
-    {"dc:91:4d:4f:9d:08", TAG_RUUVI, "????", "", "Sisetemp", 0, 0x00ff42},
+    {"c0:49:ef:d3:76:5e", TAG_DUAL_FLOAT, "????", "", "Must", 0, TFT_WHITE},
+    {"ff:ff:ff:ff:ff:ff", TAG_DUAL_FLOAT, "????", "", "Hall", 0, TFT_WHITE},
+    {"d4:aa:40:07:a8:0a", TAG_RUUVI, "????", "", "Külmik", 0, 0x00ff42},
+    {"f9:e0:62:88:10:bb", TAG_RUUVI, "????", "", "Sügavk.", 0, 0x00ff42},
+    {"d4:e1:02:40:59:96", TAG_RUUVI, "????", "", "Välis", 0, 0x00ff42},
+    {"dc:91:4d:4f:9d:08", TAG_RUUVI, "????", "", "Sise", 0, 0x00ff42},
 };
 
 KeyValuePair *getTag(const char *address)
@@ -69,8 +70,8 @@ void setup()
 {
   tft.init();
   tft.setRotation(2);
-  tft.loadFont(Roboto_16);
-  tft.fillScreen(TFT_WHITE);
+  tft.loadFont(Roboto_Bold_38);
+  tft.fillScreen(BG);
   setupBluetooth();
   Serial.begin(115200);
 }
@@ -93,7 +94,7 @@ void loop()
     }
     if (strcmp(tag->value, tag->previousValue) != 0)
     {
-      tft.fillRect(0, drawy - 48 / 2, TFTW, 48, TFT_WHITE);
+      tft.fillRect(0, drawy - 48 / 2, TFTW, 48, BG);
       tft.setTextDatum(3);
       tft.setTextColor(tag->color);
       tft.drawString(tag->text, 16, drawy);
@@ -196,17 +197,17 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
     float temperature = raw_temperature * 0.005; // Celcius
     // float humidity = raw_humidity * 0.0025; // Percent
 
-    updateValue(tag, temperature, "%.1f `C");
+    updateValue(tag, temperature, "%.1f °C");
   }
   
   void handleDualFloat(BLEAdvertisedDevice device, KeyValuePair *tag)
   {
     uint8_t *data = device.getPayload();
 
-    updateValue(tag, data[10], "%.0f %%");
+    updateValue(tag, data[9], "%.0f %%");
 
     KeyValuePair *tag2 = getTag("ff:ff:ff:ff:ff:ff");
-    updateValue(tag2, data[9], "%.0f %%");
+    updateValue(tag2, data[10], "%.0f %%");
   }
 
   void handleSingleFloat(BLEAdvertisedDevice device, KeyValuePair *tag)
@@ -217,7 +218,7 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
 
   void updateValue(KeyValuePair *tag, float value, char *format)
   {
-    char newValue[8];
+    char newValue[10];
     sprintf(newValue, format, value);
     strncpy(tag->previousValue, tag->value, sizeof(tag->previousValue));
     strncpy(tag->value, newValue, sizeof(tag->value));
