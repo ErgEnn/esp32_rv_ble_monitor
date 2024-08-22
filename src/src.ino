@@ -43,11 +43,11 @@ typedef struct KeyValuePair
 
 #define TAG_COUNT 9
 KeyValuePair addresses[TAG_COUNT] = {
-    {"c0:49:ef:d3:74:76", TAG_SINGLE_FLOAT, "????", "", "Vesi", 0, TFT_BLUE},
+    {"c0:49:ef:d3:74:76", TAG_DUAL_FLOAT, "????", "", "Vesi", 0, TFT_BLUE},
     {"48:70:1e:92:20:f2", TAG_MOPEKA, "????", "", "Gaas 1", 0, 0x06af},
     {"cc:33:31:c8:73:34", TAG_MOPEKA, "????", "", "Gaas 2", 0, 0x06af},
-    {"c0:49:ef:d3:76:5e", TAG_DUAL_FLOAT, "????", "", "Must", 0, TFT_WHITE},
-    {"ff:ff:ff:ff:ff:ff", TAG_DUAL_FLOAT, "????", "", "Hall", 0, TFT_WHITE},
+    {"ff:ff:ff:ff:ff:01", TAG_DUAL_FLOAT, "????", "", "Must", 0, TFT_WHITE},
+    {"ff:ff:ff:ff:ff:02", TAG_DUAL_FLOAT, "????", "", "Hall", 0, TFT_WHITE},
     {"d4:aa:40:07:a8:0a", TAG_RUUVI, "????", "", "Külmik", 0, 0x00ff42},
     {"f9:e0:62:88:10:bb", TAG_RUUVI, "????", "", "Sügavk.", 0, 0x00ff42},
     {"d4:e1:02:40:59:96", TAG_RUUVI, "????", "", "Välis", 0, 0x00ff42},
@@ -69,7 +69,7 @@ KeyValuePair *getTag(const char *address)
 void setup()
 {
   tft.init();
-  tft.setRotation(2);
+  tft.setRotation(0);
   tft.loadFont(Roboto_Bold_38);
   tft.fillScreen(BG);
   setupBluetooth();
@@ -176,7 +176,7 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
         handleMopeka(device, tag);
         break;
       case TAG_DUAL_FLOAT:
-        handleDualFloat(device, tag);
+        handleMultiFloat(device, tag);
         break;
       case TAG_SINGLE_FLOAT:
         handleSingleFloat(device, tag);
@@ -200,14 +200,16 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
     updateValue(tag, temperature, "%.1f °C");
   }
   
-  void handleDualFloat(BLEAdvertisedDevice device, KeyValuePair *tag)
+  void handleMultiFloat(BLEAdvertisedDevice device, KeyValuePair *tag)
   {
     uint8_t *data = device.getPayload();
 
-    updateValue(tag, data[9], "%.0f %%");
+    updateValue(tag, data[9], "%.0f L");
 
-    KeyValuePair *tag2 = getTag("ff:ff:ff:ff:ff:ff");
+    KeyValuePair *tag2 = getTag("ff:ff:ff:ff:ff:01");
     updateValue(tag2, data[10], "%.0f %%");
+    KeyValuePair *tag3 = getTag("ff:ff:ff:ff:ff:02");
+    updateValue(tag3, data[11], "%.0f %%");
   }
 
   void handleSingleFloat(BLEAdvertisedDevice device, KeyValuePair *tag)
